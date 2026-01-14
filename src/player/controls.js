@@ -58,8 +58,43 @@ function onMouseUp(e) {
 
 function onKeyDown(e) {
   Input.keys[e.code] = true
+  // Debug para Space
+  if (e.code === 'Space') {
+    console.log('🎹 SPACE DOWN - Code:', e.code, 'Key:', e.key)
+  }
 }
 
 function onKeyUp(e) {
   Input.keys[e.code] = false
+  // Debug para Space
+  if (e.code === 'Space') {
+    console.log('🎹 SPACE UP - Code:', e.code, 'Key:', e.key)
+  }
 }
+
+// Debug - mostrar teclas pressionadas
+function debugKeys() {
+  const pressedKeys = Object.keys(Input.keys).filter(key => Input.keys[key])
+  if (pressedKeys.length > 0) {
+    console.log('🎹 Teclas pressionadas:', pressedKeys)
+  }
+}
+
+// Expor função de debug globalmente
+window.debugKeys = debugKeys
+
+// Função para testar detecção da tecla Space especificamente
+export function testSpaceKey() {
+  console.log('🧪 Teste da tecla Space:')
+  console.log('- Input.keys.Space:', Input.keys.Space)
+  console.log('- Input.keys[" "]:', Input.keys[' '])
+  console.log('- Todas as teclas ativas:', Object.keys(Input.keys).filter(k => Input.keys[k]))
+  
+  const spacePressed = Input.keys.Space || Input.keys[' ']
+  console.log('- Space detectado:', spacePressed)
+  
+  return spacePressed
+}
+
+// Expor globalmente
+window.testSpaceKey = testSpaceKey
