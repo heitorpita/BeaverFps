@@ -1,4 +1,4 @@
-import { player } from './player.js'
+import { processPlayerMouseMovement } from './player.js'
 import { camera } from '../core/camera.js'
 
 export const Input = {
@@ -15,8 +15,6 @@ export const Input = {
   }
 }
 
-let yaw = 0
-let pitch = 0
 let controlsActive = true
 
 export function initControls() {
@@ -54,13 +52,8 @@ function onMouseMove(e) {
   Input.mouse.deltaX = e.movementX
   Input.mouse.deltaY = e.movementY
 
-  yaw   -= Input.mouse.deltaX * 0.002
-  pitch -= Input.mouse.deltaY * 0.002
-
-  pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch))
-
-  player.rotation.y = yaw
-  camera.rotation.x = pitch
+  // Usar a função da classe Player para processar movimento do mouse
+  processPlayerMouseMovement(Input.mouse.deltaX, Input.mouse.deltaY)
 }
 
 function onMouseDown(e) {

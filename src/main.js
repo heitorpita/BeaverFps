@@ -9,6 +9,7 @@ import { loadWorld } from './world/loader.js'
 import { createLights } from './core/lights.js'
 import { physicsWorld } from './physics/physics.js'
 import { createPhysicsDebug } from './physics/debug.js'
+import { initDebugMenu } from './ui/debugMenu.js'
 
 // Estado do jogo
 let gameState = 'menu' // 'menu', 'loading', 'playing', 'paused'
@@ -170,5 +171,6 @@ class MenuSystem {
 // Inicializar sistema de menu quando a página carregar
 document.addEventListener('DOMContentLoaded', () => {
   new MenuSystem()
+  initDebugMenu() // Inicializar menu de debug
   console.log('🌟 BeaverFps carregado! Clique em "Iniciar Jogo" para começar.')
 })
