@@ -17,6 +17,7 @@ export const Input = {
 
 let yaw = 0
 let pitch = 0
+let controlsActive = true
 
 export function initControls() {
   document.body.addEventListener('click', () => {
@@ -31,8 +32,24 @@ export function initControls() {
   document.addEventListener('keyup', onKeyUp)
 }
 
+export function pauseControls() {
+  controlsActive = false
+  // Limpar todas as teclas
+  Object.keys(Input.keys).forEach(key => Input.keys[key] = false)
+  // Sair do pointer lock
+  if (document.pointerLockElement) {
+    document.exitPointerLock()
+  }
+  console.log('🔒 Controles pausados')
+}
+
+export function resumeControls() {
+  controlsActive = true
+  console.log('🔓 Controles resumidos')
+}
+
 function onMouseMove(e) {
-  if (!document.pointerLockElement) return
+  if (!document.pointerLockElement || !controlsActive) return
 
   Input.mouse.deltaX = e.movementX
   Input.mouse.deltaY = e.movementY
@@ -47,16 +64,19 @@ function onMouseMove(e) {
 }
 
 function onMouseDown(e) {
+  if (!controlsActive) return
   if (e.button === 0) Input.mouse.left = true
   if (e.button === 2) Input.mouse.right = true
 }
 
 function onMouseUp(e) {
+  if (!controlsActive) return
   if (e.button === 0) Input.mouse.left = false
   if (e.button === 2) Input.mouse.right = false
 }
 
 function onKeyDown(e) {
+  if (!controlsActive) return
   Input.keys[e.code] = true
   // Debug para Space
   if (e.code === 'Space') {
@@ -65,6 +85,7 @@ function onKeyDown(e) {
 }
 
 function onKeyUp(e) {
+  if (!controlsActive) return
   Input.keys[e.code] = false
   // Debug para Space
   if (e.code === 'Space') {

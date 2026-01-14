@@ -3,17 +3,38 @@ import { scene } from "./scene.js";
 import { camera } from "./camera.js";
 
 let lastTime = 0
+let animationFrameId = null
+let isLoopRunning = false
 
 export function startLoop(update, render) {
+  if (isLoopRunning) {
+    console.warn('⚠️ Loop já está rodando')
+    return
+  }
+
+  isLoopRunning = true
+
   function loop(time) {
+    if (!isLoopRunning) return
+
     const delta = (time - lastTime) / 1000
     lastTime = time
 
     update(delta)
     render()
 
-    requestAnimationFrame(loop)
+    animationFrameId = requestAnimationFrame(loop)
   }
 
-  requestAnimationFrame(loop)
+  animationFrameId = requestAnimationFrame(loop)
+  console.log('▶️ Loop iniciado')
+}
+
+export function stopLoop() {
+  isLoopRunning = false
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId)
+    animationFrameId = null
+  }
+  console.log('⏹️ Loop parado')
 }
