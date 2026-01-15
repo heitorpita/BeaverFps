@@ -22,7 +22,7 @@ export class Player {
       height: 1.4,
       maxSpeed: 10.0,
       mouseSensitivity: 0.002,
-      fov: 41
+      fov: 39.5
     }
     
     // Estado do player

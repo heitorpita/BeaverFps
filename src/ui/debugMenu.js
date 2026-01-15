@@ -11,7 +11,7 @@ const debugConfig = {
   // Configurações do player que serão ajustáveis
   mouseSensitivity: 0.002,
   movementSpeed: 5.0,
-  fov: 75,
+  fov: 40,
   jumpForce: 4.5
 }
 
