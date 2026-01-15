@@ -13,6 +13,13 @@ export function getPlayer() {
   return playerInstance
 }
 
+/**
+ * Obtém a instância real da classe Player (para acesso aos métodos da classe)
+ */
+export function getPlayerInstance() {
+  return getPlayer()
+}
+
 // Compatibilidade com código existente
 export const player = new Proxy({}, {
   get(target, prop) {

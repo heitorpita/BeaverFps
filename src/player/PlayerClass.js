@@ -30,9 +30,24 @@ export class Player {
       lastJumpTime: 0,
       jumpCooldown: 300,
       health: 100,
+      maxHealth: 100,
       stamina: 100,
       position: new THREE.Vector3(),
-      velocity: new THREE.Vector3()
+      velocity: new THREE.Vector3(),
+      // Sistema de vida
+      isAlive: true,
+      isDamageInvulnerable: false,
+      invulnerabilityTime: 0,
+      invulnerabilityDuration: 1000, // 1 segundo de invulnerabilidade após dano
+      lastDamageTime: 0
+    }
+    
+    // Configurações de dano
+    this.damageConfig = {
+      fallDamageThreshold: -15.0, // Velocidade Y que causa dano por queda
+      fallDamageMultiplier: 5.0,  // Multiplicador do dano por queda
+      maxFallDamage: 80,          // Dano máximo por queda
+      deathRespawnDelay: 3000     // Delay para respawn após morte (ms)
     }
     
     // Física
@@ -253,11 +268,118 @@ export class Player {
    * Atualiza o estado do player
    */
   updateState(delta) {
+    // Atualizar sistema de invulnerabilidade
+    this.updateInvulnerability(delta)
+    
     // Atualizar stamina (exemplo)
     if (this._moveVector.length() > 0) {
       this.state.stamina = Math.max(0, this.state.stamina - 10 * delta)
     } else {
       this.state.stamina = Math.min(100, this.state.stamina + 20 * delta)
+    }
+    
+    // Verificar dano por queda (apenas se estiver vivo)
+    if (this.state.isAlive) {
+      this.checkFallDamage()
+    }
+  }
+  
+  /**
+   * Verifica e aplica dano por queda se necessário
+   */
+  checkFallDamage() {
+    if (!this.state.isGrounded || this.state.isAlive) return
+    
+    const fallVelocity = this.physics.rigidBody.linvel().y
+    
+    if (fallVelocity < this.damageConfig.fallDamageThreshold) {
+      const damage = Math.min(
+        this.damageConfig.maxFallDamage,
+        -fallVelocity * this.damageConfig.fallDamageMultiplier
+      )
+      
+      console.log(`💥 Dano por queda: ${damage}`)
+      this.applyDamage(damage)
+    }
+  }
+  
+  /**
+   * Aplica dano ao jogador
+   */
+  applyDamage(amount) {
+    if (this.state.isDamageInvulnerable) return
+    
+    this.state.health = Math.max(0, this.state.health - amount)
+    this.state.lastDamageTime = Date.now()
+    
+    console.log(`❤️ Dano recebido: ${amount}. Vida restante: ${this.state.health}`)
+    
+    // Ativar invulnerabilidade temporária
+    this.activateInvulnerability()
+    
+    // Verificar morte
+    if (this.state.health === 0) {
+      this.die()
+    }
+    
+    // Disparar eventos de dano
+    this.triggerHealthEvent('onDamage', amount)
+  }
+  
+  /**
+   * Ativa a invulnerabilidade temporária
+   */
+  activateInvulnerability() {
+    this.state.isDamageInvulnerable = true
+    
+    setTimeout(() => {
+      this.state.isDamageInvulnerable = false
+    }, this.state.invulnerabilityDuration)
+    
+    console.log(`🛡️ Invulnerabilidade ativada por ${this.state.invulnerabilityDuration}ms`)
+  }
+  
+  /**
+   * Mata o jogador e inicia o respawn
+   */
+  die() {
+    this.state.isAlive = false
+    this.state.health = 0
+    
+    console.log('💀 Jogador morreu')
+    
+    // Disparar evento de morte
+    this.triggerHealthEvent('onDeath')
+    
+    // Iniciar respawn após delay
+    setTimeout(() => {
+      this.respawn()
+    }, this.damageConfig.deathRespawnDelay)
+  }
+  
+  /**
+   * Respawn do jogador
+   */
+  respawn() {
+    this.state.isAlive = true
+    this.state.health = this.state.maxHealth
+    
+    // Reposicionar o jogador (exemplo: posição fixa ou aleatória)
+    this.setPosition(0, 5, 0)
+    
+    console.log('🔄 Jogador respawnado')
+    
+    // Disparar evento de respawn
+    this.triggerHealthEvent('onRespawn')
+  }
+  
+  /**
+   * Dispara eventos relacionados à saúde
+   */
+  triggerHealthEvent(eventName, ...args) {
+    const eventHandlers = this.healthEvents[eventName] || []
+    for (const handler of eventHandlers) {
+      handler(...args)
     }
   }
   
@@ -365,7 +487,8 @@ export class Player {
         isGrounded: this.state.isGrounded,
         canJump: this.state.canJump,
         health: this.state.health,
-        stamina: this.state.stamina.toFixed(1)
+        stamina: this.state.stamina.toFixed(1),
+        isAlive: this.state.isAlive
       },
       config: this.config,
       camera: {
@@ -457,14 +580,269 @@ export class Player {
       }
     }
     
+    // Funções de debug para sistema de vida
+    window.testDamage = (amount = 20) => {
+      this.takeDamage(amount, 'debug')
+      console.log(`💥 Dano de teste aplicado: ${amount}`)
+    }
+    
+    window.testHeal = (amount = 25) => {
+      this.heal(amount)
+      console.log(`💚 Cura de teste aplicada: ${amount}`)
+    }
+    
+    window.testDeath = () => {
+      this.takeDamage(this.state.health, 'debug-death')
+      console.log('💀 Morte de teste forçada')
+    }
+    
+    window.testFallDamage = () => {
+      // Simular queda forçando velocidade negativa
+      if (this.physics.rigidBody) {
+        this.physics.rigidBody.setLinvel({ x: 0, y: -20, z: 0 }, true)
+        console.log('🪂 Simulando queda para teste de dano')
+      }
+    }
+    
+    window.getHealthInfo = () => {
+      const info = this.getHealthInfo()
+      console.log('❤️ INFO DE VIDA:', info)
+      return info
+    }
+    
     // Presets úteis
     window.jumpPresets = () => {
-      console.log('🎮 PRESETS DE PULO:')
+      console.log('🎮 PRESETS DE TESTE:')
+      console.log('=== PULO ===')
       console.log('setJumpForce(5)   // Pulo baixo')
       console.log('setJumpForce(10)  // Pulo normal') 
       console.log('setJumpForce(15)  // Pulo alto')
       console.log('setJumpForce(20)  // Super pulo')
       console.log('testJumpNow()     // Testar pulo agora')
+      console.log('')
+      console.log('=== VIDA ===')
+      console.log('testDamage(20)    // Aplicar 20 de dano')
+      console.log('testHeal(25)      // Curar 25 pontos')
+      console.log('testDeath()       // Forçar morte')
+      console.log('testFallDamage()  // Simular dano por queda')
+      console.log('getHealthInfo()   // Ver informações de vida')
+    }
+  }
+  
+  // ===== SISTEMA DE VIDA =====
+  
+  /**
+   * Aplica dano ao player
+   * @param {number} amount - Quantidade de dano
+   * @param {string} source - Fonte do dano (fall, enemy, environment, etc.)
+   * @param {Object} options - Opções adicionais
+   */
+  takeDamage(amount, source = 'unknown', options = {}) {
+    if (!this.state.isAlive || this.state.isDamageInvulnerable) {
+      return false
+    }
+    
+    const finalDamage = Math.max(0, Math.min(amount, this.state.health))
+    
+    console.log(`💥 Player recebeu ${finalDamage} de dano (fonte: ${source})`)
+    
+    // Aplicar dano
+    this.state.health = Math.max(0, this.state.health - finalDamage)
+    this.state.lastDamageTime = Date.now()
+    
+    // Ativar invulnerabilidade temporária
+    this.state.isDamageInvulnerable = true
+    this.state.invulnerabilityTime = this.state.invulnerabilityDuration
+    
+    // Disparar evento de dano
+    this.triggerHealthEvent('onDamage', {
+      damage: finalDamage,
+      source: source,
+      remainingHealth: this.state.health,
+      options: options
+    })
+    
+    // Disparar evento de mudança de vida
+    this.triggerHealthEvent('onHealthChange', {
+      health: this.state.health,
+      maxHealth: this.state.maxHealth,
+      percentage: (this.state.health / this.state.maxHealth) * 100
+    })
+    
+    // Verificar se morreu
+    if (this.state.health <= 0) {
+      this.die(source)
+    }
+    
+    return true
+  }
+  
+  /**
+   * Cura o player
+   * @param {number} amount - Quantidade de cura
+   */
+  heal(amount) {
+    if (!this.state.isAlive) return false
+    
+    const oldHealth = this.state.health
+    this.state.health = Math.min(this.state.maxHealth, this.state.health + amount)
+    const actualHeal = this.state.health - oldHealth
+    
+    if (actualHeal > 0) {
+      console.log(`💚 Player curado em ${actualHeal} pontos`)
+      
+      // Disparar evento de mudança de vida
+      this.triggerHealthEvent('onHealthChange', {
+        health: this.state.health,
+        maxHealth: this.state.maxHealth,
+        percentage: (this.state.health / this.state.maxHealth) * 100
+      })
+    }
+    
+    return actualHeal > 0
+  }
+  
+  /**
+   * Mata o player
+   * @param {string} cause - Causa da morte
+   */
+  die(cause = 'unknown') {
+    if (!this.state.isAlive) return
+    
+    this.state.isAlive = false
+    this.state.health = 0
+    
+    console.log(`💀 Player morreu (causa: ${cause})`)
+    
+    // Disparar evento de morte
+    this.triggerHealthEvent('onDeath', {
+      cause: cause,
+      position: this.state.position.clone()
+    })
+    
+    // Programar respawn
+    setTimeout(() => {
+      this.respawn()
+    }, this.damageConfig.deathRespawnDelay)
+  }
+  
+  /**
+   * Respawna o player
+   */
+  respawn() {
+    // Restaurar vida
+    this.state.health = this.state.maxHealth
+    this.state.isAlive = true
+    this.state.isDamageInvulnerable = false
+    this.state.invulnerabilityTime = 0
+    
+    // Reposicionar player
+    this.setPosition(0, 5, 0) // Posição de spawn
+    
+    console.log('🔄 Player respawnou')
+    
+    // Disparar evento de respawn
+    this.triggerHealthEvent('onRespawn', {
+      health: this.state.health,
+      position: this.state.position.clone()
+    })
+    
+    // Disparar evento de mudança de vida
+    this.triggerHealthEvent('onHealthChange', {
+      health: this.state.health,
+      maxHealth: this.state.maxHealth,
+      percentage: 100
+    })
+  }
+  
+  /**
+   * Verifica dano por queda
+   */
+  checkFallDamage() {
+    if (!this.physics.rigidBody) return
+    
+    const currentVel = this.physics.rigidBody.linvel()
+    
+    // Se a velocidade Y é muito negativa e player acabou de tocar o chão
+    if (this.state.isGrounded && currentVel.y < this.damageConfig.fallDamageThreshold) {
+      const fallSpeed = Math.abs(currentVel.y)
+      const damage = Math.min(
+        fallSpeed * this.damageConfig.fallDamageMultiplier,
+        this.damageConfig.maxFallDamage
+      )
+      
+      this.takeDamage(damage, 'fall', { fallSpeed: fallSpeed })
+    }
+  }
+  
+  /**
+   * Atualiza sistema de invulnerabilidade
+   * @param {number} delta - Delta time
+   */
+  updateInvulnerability(delta) {
+    if (this.state.isDamageInvulnerable) {
+      this.state.invulnerabilityTime -= delta * 1000
+      
+      if (this.state.invulnerabilityTime <= 0) {
+        this.state.isDamageInvulnerable = false
+        this.state.invulnerabilityTime = 0
+      }
+    }
+  }
+  
+  /**
+   * Adiciona listener para eventos de vida
+   * @param {string} event - Nome do evento
+   * @param {function} callback - Função callback
+   */
+  onHealthEvent(event, callback) {
+    if (this.healthEvents[event]) {
+      this.healthEvents[event].push(callback)
+    }
+  }
+  
+  /**
+   * Remove listener de eventos de vida
+   * @param {string} event - Nome do evento
+   * @param {function} callback - Função callback
+   */
+  offHealthEvent(event, callback) {
+    if (this.healthEvents[event]) {
+      const index = this.healthEvents[event].indexOf(callback)
+      if (index > -1) {
+        this.healthEvents[event].splice(index, 1)
+      }
+    }
+  }
+  
+  /**
+   * Dispara evento de vida
+   * @param {string} event - Nome do evento
+   * @param {Object} data - Dados do evento
+   */
+  triggerHealthEvent(event, data) {
+    if (this.healthEvents[event]) {
+      this.healthEvents[event].forEach(callback => {
+        try {
+          callback(data)
+        } catch (error) {
+          console.error(`Erro no evento ${event}:`, error)
+        }
+      })
+    }
+  }
+  
+  /**
+   * Obtém informações de vida
+   */
+  getHealthInfo() {
+    return {
+      health: this.state.health,
+      maxHealth: this.state.maxHealth,
+      percentage: (this.state.health / this.state.maxHealth) * 100,
+      isAlive: this.state.isAlive,
+      isInvulnerable: this.state.isDamageInvulnerable,
+      invulnerabilityTimeLeft: this.state.invulnerabilityTime
     }
   }
   

@@ -3,7 +3,7 @@ import { renderer } from './core/renderer.js'
 import { camera } from './core/camera.js'
 import { startLoop, stopLoop } from './core/loop.js'
 import { createStats } from './core/debug.js'
-import { player, updatePlayer, initPlayer, positionPlayerAfterWorldLoad } from './player/player.js'
+import { player, updatePlayer, initPlayer, positionPlayerAfterWorldLoad, getPlayerInstance } from './player/player.js'
 import { initControls, pauseControls, resumeControls } from './player/controls.js'
 import { loadWorld } from './world/loader.js'
 import { createLights } from './core/lights.js'
@@ -139,6 +139,7 @@ class MenuSystem {
     // 6.1. Posicionar player após mundo carregado
     positionPlayerAfterWorldLoad()
     
+
     // 7. Configurar stats e debug
     stats = createStats()
     physicsDebug = createPhysicsDebug(scene)
