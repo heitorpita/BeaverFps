@@ -2,6 +2,8 @@ import * as THREE from 'three'
 import { physicsWorld } from '../physics/physics.js'
 import { Input } from './controls.js'
 import { camera } from '../core/camera.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { AnimationMixer } from 'three'
 
 /**
  * Classe responsável pelo estado e comportamento do jogador
@@ -20,7 +22,7 @@ export class Player {
       height: 1.4,
       maxSpeed: 10.0,
       mouseSensitivity: 0.002,
-      fov: 75
+      fov: 41
     }
     
     // Estado do player
@@ -91,6 +93,40 @@ export class Player {
       bodyType: this.physics.rigidBody.bodyType(),
       config: this.config
     })
+
+const loader = new GLTFLoader()
+
+loader.load('models/glock.glb', (gltf) => {
+  this.armModel = gltf.scene
+
+  // Escala (quase sempre grande demais vindo do Blender)
+  this.armModel.scale.setScalar(0.2)
+
+  // Posição relativa à câmera (FPS)
+  this.armModel.position.set(0, -0.300, -0.140)
+
+  // ROTACIONAR para frente da câmera
+  this.armModel.rotation.set(0, Math.PI, 0)
+
+  // 👉 MUITO IMPORTANTE
+  camera.add(this.armModel)
+
+  // Debug: evita culling estranho
+  this.armModel.traverse((child) => {
+    if (child.isMesh) {
+      child.frustumCulled = false
+    }
+  })
+
+  // // Animações
+  // if (gltf.animations.length) {
+  //   this.mixer = new AnimationMixer(this.armModel)
+  //   this.action = this.mixer.clipAction(gltf.animations[0])
+  //   this.action.play()
+  // }
+
+  console.log('🔫 Glock FPS posicionada corretamente')
+})
   }
   
   /**
@@ -116,6 +152,11 @@ export class Player {
     
     // Atualizar estado
     this.updateState(delta)
+
+    if(this.mixer) {
+      this.mixer.update(delta)
+    }
+
   }
   
   /**
