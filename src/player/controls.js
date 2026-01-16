@@ -1,43 +1,79 @@
 import { processPlayerMouseMovement } from './player.js'
-import { camera } from '../core/camera.js'
 
 export const Input = {
   keys: {},
+
   mouse: {
-    x: 0,
-    y: 0,
-    deltaX: 0,
-    deltaY: 0,
     left: false,
     right: false,
-    prevX: 0,
-    prevY: 0
+    deltaX: 0,
+    deltaY: 0
+  },
+
+  // Estado anterior (para detecção de borda)
+  prev: {
+    mouseLeft: false,
+    keyR: false,
+    digit1: false
+  },
+
+  // Ações detectadas por borda (true SOMENTE no frame do evento)
+  actions: {
+    shoot: false,
+    reload: false,
+    weaponSlot1: false
   }
 }
 
 let controlsActive = true
 
+// ==============================
+// INIT
+// ==============================
 export function initControls() {
-  document.body.addEventListener('click', () => {
-    document.body.requestPointerLock()
-  })
-
-  document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mousedown', onMouseDown)
   document.addEventListener('mouseup', onMouseUp)
+  document.addEventListener('mousemove', onMouseMove)
 
   document.addEventListener('keydown', onKeyDown)
   document.addEventListener('keyup', onKeyUp)
+
+  console.log('🎮 Controles inicializados')
 }
 
+// ==============================
+// UPDATE (CHAMAR TODO FRAME)
+// ==============================
+export function updateInputActions() {
+  Input.actions.shoot =
+    Input.mouse.left && !Input.prev.mouseLeft
+
+  Input.actions.reload =
+    Input.keys.KeyR && !Input.prev.keyR
+
+  Input.actions.weaponSlot1 =
+    Input.keys.Digit1 && !Input.prev.digit1
+
+  // Atualizar estado anterior
+  Input.prev.mouseLeft = Input.mouse.left
+  Input.prev.keyR = !!Input.keys.KeyR
+  Input.prev.digit1 = !!Input.keys.Digit1
+}
+
+// ==============================
+// PAUSE / RESUME
+// ==============================
 export function pauseControls() {
   controlsActive = false
-  // Limpar todas as teclas
-  Object.keys(Input.keys).forEach(key => Input.keys[key] = false)
-  // Sair do pointer lock
+
+  Object.keys(Input.keys).forEach(k => Input.keys[k] = false)
+  Input.mouse.left = false
+  Input.mouse.right = false
+
   if (document.pointerLockElement) {
     document.exitPointerLock()
   }
+
   console.log('🔒 Controles pausados')
 }
 
@@ -46,69 +82,65 @@ export function resumeControls() {
   console.log('🔓 Controles resumidos')
 }
 
-function onMouseMove(e) {
-  if (!document.pointerLockElement || !controlsActive) return
-
-  Input.mouse.deltaX = e.movementX
-  Input.mouse.deltaY = e.movementY
-
-  // Usar a função da classe Player para processar movimento do mouse
-  processPlayerMouseMovement(Input.mouse.deltaX, Input.mouse.deltaY)
-}
-
+// ==============================
+// EVENTS
+// ==============================
 function onMouseDown(e) {
   if (!controlsActive) return
-  if (e.button === 0) Input.mouse.left = true
-  if (e.button === 2) Input.mouse.right = true
+
+  if (e.button === 0) {
+    Input.mouse.left = true
+
+    // Ativar pointer lock com botão esquerdo
+    if (!document.pointerLockElement) {
+      document.body.requestPointerLock()
+    }
+  }
+
+  if (e.button === 2) {
+    Input.mouse.right = true
+  }
 }
 
 function onMouseUp(e) {
   if (!controlsActive) return
+
   if (e.button === 0) Input.mouse.left = false
   if (e.button === 2) Input.mouse.right = false
+}
+
+function onMouseMove(e) {
+  if (!controlsActive) return
+  if (!document.pointerLockElement) return
+
+  Input.mouse.deltaX = e.movementX
+  Input.mouse.deltaY = e.movementY
+
+  processPlayerMouseMovement(
+    Input.mouse.deltaX,
+    Input.mouse.deltaY
+  )
 }
 
 function onKeyDown(e) {
   if (!controlsActive) return
   Input.keys[e.code] = true
-  // Debug para Space
-  if (e.code === 'Space') {
-    console.log('🎹 SPACE DOWN - Code:', e.code, 'Key:', e.key)
-  }
 }
 
 function onKeyUp(e) {
   if (!controlsActive) return
   Input.keys[e.code] = false
-  // Debug para Space
-  if (e.code === 'Space') {
-    console.log('🎹 SPACE UP - Code:', e.code, 'Key:', e.key)
-  }
 }
 
-// Debug - mostrar teclas pressionadas
-function debugKeys() {
-  const pressedKeys = Object.keys(Input.keys).filter(key => Input.keys[key])
-  if (pressedKeys.length > 0) {
-    console.log('🎹 Teclas pressionadas:', pressedKeys)
-  }
+// ==============================
+// DEBUG (opcional)
+// ==============================
+export function debugInput() {
+  console.log({
+    keys: Object.keys(Input.keys).filter(k => Input.keys[k]),
+    mouseLeft: Input.mouse.left,
+    actions: Input.actions
+  })
 }
 
-// Expor função de debug globalmente
-window.debugKeys = debugKeys
-
-// Função para testar detecção da tecla Space especificamente
-export function testSpaceKey() {
-  console.log('🧪 Teste da tecla Space:')
-  console.log('- Input.keys.Space:', Input.keys.Space)
-  console.log('- Input.keys[" "]:', Input.keys[' '])
-  console.log('- Todas as teclas ativas:', Object.keys(Input.keys).filter(k => Input.keys[k]))
-  
-  const spacePressed = Input.keys.Space || Input.keys[' ']
-  console.log('- Space detectado:', spacePressed)
-  
-  return spacePressed
-}
-
-// Expor globalmente
-window.testSpaceKey = testSpaceKey
+window.debugInput = debugInput

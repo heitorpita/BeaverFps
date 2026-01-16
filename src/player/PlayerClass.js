@@ -1,9 +1,9 @@
 import * as THREE from 'three'
 import { physicsWorld } from '../physics/physics.js'
-import { Input } from './controls.js'
+import { Input, updateInputActions } from './controls.js'
 import { camera } from '../core/camera.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
-import { AnimationMixer } from 'three'
+import { AnimationMixer, LoopOnce, LoopRepeat } from 'three'
 
 /**
  * Classe responsável pelo estado e comportamento do jogador
@@ -58,6 +58,54 @@ export class Player {
     this._rayOrigin = new THREE.Vector3()
     this._rayDirection = new THREE.Vector3(0, -1, 0)
     
+    // Sistema de armas com State Machine aprimorado
+    this.weapon = {
+      model: null,
+      mixer: null,
+      animations: {},
+      currentAction: null,
+      state: 'idle', // idle | shooting | reloading | drawing | hiding | slideBack | reloadEmpty
+      equipped: false,
+      slot: 1, // Slot atual da arma (1-5)
+      
+      // Munição
+      ammo: 17,
+      maxAmmo: 17,
+      
+      // Mapeamento estado → animação
+      stateMap: {
+        idle: null,           // Não precisa de animação, apenas fica parado
+        shooting: 'Fire',
+        reloading: 'Reload',
+        reloadEmpty: 'ReloadEmpty',
+        drawing: 'Draw',
+        hiding: 'Holster',
+        slideBack: 'SlideBack'
+      },
+      
+      // ⚡ VELOCIDADE DAS ANIMAÇÕES (timeScale) - AJUSTE AQUI!
+      // Valores maiores = mais rápido | 1.0 = velocidade normal
+      animationSpeed: {
+        Fire: 4.5,         // 🔫 Tiro - 2.5x mais rápido
+        Reload: 1.5,       // 🔄 Reload - 1.5x mais rápido
+        ReloadEmpty: 1.3,  // 🔄 Reload vazio - 1.3x mais rápido
+        Draw: 1.8,         // 🗡️ Sacar - 1.8x mais rápido
+        Holster: 1.5,      // 🔒 Guardar - 1.5x mais rápido
+        SlideBack: 2.0     // 🔧 Slide - 2.0x mais rápido
+      },
+      
+      // Prioridade dos estados (maior = mais prioritário)
+      statePriority: {
+        idle: 0,
+        drawing: 1,
+        hiding: 1,
+        slideBack: 2,
+        shooting: 3,
+        reloading: 4,
+        reloadEmpty: 4
+      }
+    }
+    
     // Expor configuração globalmente para debug
     window.playerConfig = this.config
     this.initDebugFunctions()
@@ -95,38 +143,204 @@ export class Player {
     })
 
 const loader = new GLTFLoader()
+const textureLoader = new THREE.TextureLoader()
 
 loader.load('models/glock.glb', (gltf) => {
-  this.armModel = gltf.scene
+  this.weapon.model = gltf.scene
 
   // Escala (quase sempre grande demais vindo do Blender)
-  this.armModel.scale.setScalar(0.2)
+  this.weapon.model.scale.setScalar(0.2)
 
   // Posição relativa à câmera (FPS)
-  this.armModel.position.set(0, -0.300, -0.140)
+  this.weapon.model.position.set(0, -0.300, -0.140)
 
   // ROTACIONAR para frente da câmera
-  this.armModel.rotation.set(0, Math.PI, 0)
+  this.weapon.model.rotation.set(0, Math.PI, 0)
 
   // 👉 MUITO IMPORTANTE
-  camera.add(this.armModel)
+  camera.add(this.weapon.model)
 
-  // Debug: evita culling estranho
-  this.armModel.traverse((child) => {
+  // Carregar e aplicar texturas externas
+  this.loadAndApplyTextures(textureLoader)
+
+  // Debug: evita culling estranho e melhora materiais
+  this.weapon.model.traverse((child) => {
     if (child.isMesh) {
       child.frustumCulled = false
+      // Melhorar qualidade das texturas
+      if (child.material && child.material.map) {
+        child.material.map.anisotropy = 16
+        child.material.map.minFilter = THREE.LinearMipmapLinearFilter
+        child.material.map.magFilter = THREE.LinearFilter
+      }
     }
   })
 
-  // // Animações
-  // if (gltf.animations.length) {
-  //   this.mixer = new AnimationMixer(this.armModel)
-  //   this.action = this.mixer.clipAction(gltf.animations[0])
-  //   this.action.play()
-  // }
+  // Configurar animações
+  if (gltf.animations && gltf.animations.length > 0) {
+    this.weapon.mixer = new AnimationMixer(this.weapon.model)
+    
+    // Armazenar todas as animações por nome
+    console.log('📋 Animações encontradas no modelo:')
+    gltf.animations.forEach(clip => {
+      const action = this.weapon.mixer.clipAction(clip)
+      this.weapon.animations[clip.name] = action
+      
+      // Configurar todas as animações para LoopOnce por padrão
+      action.setLoop(LoopOnce, 1)
+      action.clampWhenFinished = true
+      
+      console.log(`  📼 "${clip.name}" (duração: ${clip.duration.toFixed(2)}s)`)
+    })
+    
+    console.log('🎬 Animações carregadas:', Object.keys(this.weapon.animations))
+    console.log('📊 Animações disponíveis:')
+    console.log('   - Draw: Sacar arma')
+    console.log('   - Fire: Atirar')
+    console.log('   - Reload: Recarregar')
+    console.log('   - ReloadEmpty: Recarregar vazia')
+    console.log('   - SlideBack: Puxar slide')
+    console.log('   - Holster: Guardar arma')
+    
+    // Evento global do mixer - STATE MACHINE
+    this.weapon.mixer.addEventListener('finished', (e) => {
+      this.onAnimationFinished(e)
+    })
+    
+    // Iniciar com Draw (sacar arma)
+    this.setWeaponState('drawing')
+    this.weapon.equipped = true
+  } else {
+    console.log('⚠️ Nenhuma animação encontrada no modelo!')
+  }
 
-  console.log('🔫 Glock FPS posicionada corretamente')
+  console.log('🔫 Glock FPS carregada!')
+  console.log('🎮 Controles: Click esquerdo = Atirar | R = Recarregar | 1 = Equipar arma')
+  console.log('⚡ Use setAnimSpeed("Fire", 3.0) para ajustar velocidade das animações')
+  
+  // Funções de debug globais
+  window.listWeaponAnimations = () => {
+    console.log('🎬 Animações disponíveis:', Object.keys(this.weapon.animations))
+    return Object.keys(this.weapon.animations)
+  }
+  
+  window.playAnimation = (name) => {
+    this.playWeaponAnimation(name)
+  }
+  
+  window.getWeaponState = () => {
+    console.log('🔫 Estado atual:', this.weapon.state)
+    console.log('🔫 Munição:', this.weapon.ammo, '/', this.weapon.maxAmmo)
+    return { state: this.weapon.state, ammo: this.weapon.ammo }
+  }
+  
+  // ⚡ FUNÇÕES PARA AJUSTAR VELOCIDADE EM TEMPO REAL
+  window.setAnimSpeed = (animName, speed) => {
+    if (this.weapon.animationSpeed[animName] !== undefined) {
+      this.weapon.animationSpeed[animName] = speed
+      console.log(`⚡ Velocidade de "${animName}" ajustada para ${speed}x`)
+    } else {
+      console.warn(`❌ Animação "${animName}" não encontrada`)
+      console.log('📋 Disponíveis:', Object.keys(this.weapon.animationSpeed))
+    }
+  }
+  
+  window.getAnimSpeeds = () => {
+    console.log('⚡ Velocidades atuais das animações:')
+    Object.entries(this.weapon.animationSpeed).forEach(([name, speed]) => {
+      console.log(`   ${name}: ${speed}x`)
+    })
+    return this.weapon.animationSpeed
+  }
+  
+  window.setFireSpeed = (speed) => {
+    this.weapon.animationSpeed.Fire = speed
+    console.log(`🔫 Velocidade do tiro: ${speed}x`)
+  }
+  
+  window.setReloadSpeed = (speed) => {
+    this.weapon.animationSpeed.Reload = speed
+    this.weapon.animationSpeed.ReloadEmpty = speed
+    console.log(`🔄 Velocidade do reload: ${speed}x`)
+  }
 })
+  }
+  
+  /**
+   * Carrega e aplica texturas externas nos materiais
+   */
+  loadAndApplyTextures(textureLoader) {
+    // Mapeamento de materiais para texturas
+    const textureMap = {
+      'Hand_D': 'models/textures/Hand_D_baseColor.png',
+      'Glove_D': 'models/textures/Glove_D_baseColor.png'
+    }
+    
+    this.weapon.model.traverse((child) => {
+      if (child.isMesh && child.material) {
+        const materialName = child.material.name
+        
+        if (textureMap[materialName]) {
+          textureLoader.load(textureMap[materialName], (texture) => {
+            texture.flipY = false // GLB geralmente não precisa flip
+            texture.colorSpace = THREE.SRGBColorSpace
+            texture.anisotropy = 16
+            
+            child.material.map = texture
+            child.material.needsUpdate = true
+            
+            console.log(`✅ Textura aplicada: ${materialName} -> ${textureMap[materialName]}`)
+          }, undefined, (error) => {
+            console.warn(`⚠️ Erro ao carregar textura para ${materialName}:`, error)
+          })
+        }
+      }
+    })
+  }
+  
+  /**
+   * Callback quando uma animação termina
+   */
+  onAnimationFinished(event) {
+    const finishedAction = event.action
+    const clipName = finishedAction.getClip().name
+    
+    console.log(`🎬 Animação "${clipName}" finalizada`)
+    
+    switch (this.weapon.state) {
+      case 'shooting':
+        // Após atirar, volta para idle
+        // Diminui munição
+        if (this.weapon.ammo > 0) {
+          this.weapon.ammo--
+        }
+        this.weapon.state = 'idle'
+        console.log(`🔫 Munição: ${this.weapon.ammo}/${this.weapon.maxAmmo}`)
+        break
+        
+      case 'reloading':
+      case 'reloadEmpty':
+        // Após recarregar, volta para idle e enche munição
+        this.weapon.ammo = this.weapon.maxAmmo
+        this.weapon.state = 'idle'
+        console.log(`🔫 Recarregado! Munição: ${this.weapon.ammo}/${this.weapon.maxAmmo}`)
+        break
+        
+      case 'drawing':
+      case 'slideBack':
+        // Volta para idle após essas animações
+        this.weapon.state = 'idle'
+        console.log('🔄 Estado: idle')
+        break
+        
+      case 'hiding':
+        // Após holster, arma fica guardada
+        this.weapon.equipped = false
+        this.weapon.state = 'idle'
+        this.weapon.model.visible = false
+        console.log('🔒 Arma guardada')
+        break
+    }
   }
   
   /**
@@ -153,10 +367,13 @@ loader.load('models/glock.glb', (gltf) => {
     // Atualizar estado
     this.updateState(delta)
 
-    if(this.mixer) {
-      this.mixer.update(delta)
+    // Atualizar animações da arma
+    if (this.weapon.mixer) {
+      this.weapon.mixer.update(delta)
     }
-
+    
+    // Processar inputs da arma
+    this.processWeaponInput()
   }
   
   /**
@@ -300,6 +517,118 @@ loader.load('models/glock.glb', (gltf) => {
     } else {
       this.state.stamina = Math.min(100, this.state.stamina + 20 * delta)
     }
+  }
+  
+  /**
+   * Processa inputs da arma (STATE MACHINE com prioridades)
+   * INPUT → STATE → ANIMATION
+   * Usa Input.actions do controls.js (detecção de borda)
+   */
+  processWeaponInput() {
+    if (!this.weapon.mixer) return
+    
+    // Atualizar detecção de borda dos inputs
+    updateInputActions()
+    
+    // Prioridade: Reload e Fire podem interromper outras ações menores
+    const currentPriority = this.weapon.statePriority[this.weapon.state] || 0
+    
+    // Se arma não está equipada, só pode sacar
+    if (!this.weapon.equipped) {
+      if (Input.actions.weaponSlot1) {
+        this.weapon.model.visible = true
+        this.weapon.equipped = true
+        this.setWeaponState('drawing')
+      }
+      return
+    }
+    
+    // PRIORIDADE 1: Recarregar (tecla R) - maior prioridade
+    if (Input.actions.reload && this.weapon.ammo < this.weapon.maxAmmo) {
+      // Reload tem prioridade alta, pode interromper shooting
+      if (currentPriority < this.weapon.statePriority.reloading) {
+        // Usa ReloadEmpty se munição = 0
+        if (this.weapon.ammo === 0) {
+          this.setWeaponState('reloadEmpty')
+        } else {
+          this.setWeaponState('reloading')
+        }
+        return
+      }
+    }
+    
+    // PRIORIDADE 2: Atirar (botão esquerdo do mouse)
+    if (Input.actions.shoot && this.weapon.ammo > 0) {
+      if (currentPriority < this.weapon.statePriority.shooting) {
+        this.setWeaponState('shooting')
+        return
+      }
+    }
+    
+    // Se não está em idle, não aceita comandos de menor prioridade
+    if (this.weapon.state !== 'idle') return
+    
+    // Guardar arma (tecla 1 quando já está equipada)
+    if (Input.actions.weaponSlot1) {
+      this.setWeaponState('hiding')
+    }
+  }
+  
+  /**
+   * Muda o estado da arma e toca a animação correspondente
+   */
+  setWeaponState(state) {
+    if (this.weapon.state === state) return
+    
+    const animName = this.weapon.stateMap[state]
+    
+    // idle não precisa de animação
+    if (state === 'idle') {
+      this.weapon.state = state
+      return
+    }
+    
+    if (!animName) {
+      console.warn(`❌ Estado '${state}' não tem animação mapeada`)
+      return
+    }
+    
+    this.weapon.state = state
+    this.playWeaponAnimation(animName)
+    
+    console.log(`🔫 Estado: ${state}`)
+  }
+  
+  /**
+   * Toca uma animação da arma por nome (versão robusta com transições)
+   * ⚡ A velocidade é controlada por this.weapon.animationSpeed
+   */
+  playWeaponAnimation(name) {
+    const action = this.weapon.animations[name]
+    
+    if (!action) {
+      console.warn(`❌ Animação '${name}' não encontrada`)
+      console.log('📋 Disponíveis:', Object.keys(this.weapon.animations))
+      return
+    }
+    
+    // Parar animação atual suavemente
+    if (this.weapon.currentAction && this.weapon.currentAction !== action) {
+      this.weapon.currentAction.fadeOut(0.05) // Transição mais rápida
+    }
+    
+    // ⚡ APLICAR VELOCIDADE DA ANIMAÇÃO
+    const speed = this.weapon.animationSpeed[name] || 1.0
+    action.timeScale = speed
+    
+    // Resetar e tocar a nova animação
+    action.reset()
+    action.fadeIn(0.05) // Transição mais rápida
+    action.play()
+    
+    this.weapon.currentAction = action
+    
+    console.log(`🎬 Tocando: ${name} (velocidade: ${speed}x)`)
   }
   
   /**
