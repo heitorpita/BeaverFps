@@ -3,13 +3,14 @@ import { renderer } from './core/renderer.js'
 import { camera } from './core/camera.js'
 import { startLoop, stopLoop } from './core/loop.js'
 import { createStats } from './core/debug.js'
-import { player, updatePlayer, initPlayer, positionPlayerAfterWorldLoad } from './player/player.js'
-import { initControls, pauseControls, resumeControls } from './player/controls.js'
+import { player, updatePlayer, initPlayer, positionPlayerAfterWorldLoad, getPlayer } from './player/player.js'
+import { initControls, pauseControls, resumeControls, Input } from './player/controls.js'
 import { loadWorld } from './world/loader.js'
 import { createLights } from './core/lights.js'
 import { physicsWorld } from './physics/physics.js'
 import { createPhysicsDebug } from './physics/debug.js'
 import { initDebugMenu } from './ui/debugMenu.js'
+import { initWeapon, updateWeapon } from './player/weapon.js'
 
 // Estado do jogo
 let gameState = 'menu' // 'menu', 'loading', 'playing', 'paused'
@@ -125,6 +126,9 @@ class MenuSystem {
     // 3. Inicializar física do player
     await initPlayer()
     
+    // 3.1. Inicializar arma FPS
+    await initWeapon()
+    
     // 4. Criar luzes
     const { ambientLight, directionalLight } = createLights()
     scene.add(ambientLight, directionalLight)
@@ -158,6 +162,10 @@ class MenuSystem {
         
         // Atualizar player
         updatePlayer(delta)
+        
+        // Atualizar arma (verificar se está andando)
+        const isMoving = Input.keys.KeyW || Input.keys.KeyS || Input.keys.KeyA || Input.keys.KeyD
+        updateWeapon(delta, isMoving)
       },
       () => {
         renderer.render(scene, camera)
