@@ -10,7 +10,8 @@ import { createLights } from './core/lights.js'
 import { physicsWorld } from './physics/physics.js'
 import { createPhysicsDebug } from './physics/debug.js'
 import { initDebugMenu } from './ui/debugMenu.js'
-import { initWeapon, updateWeapon } from './player/weapon.js'
+import { initWeapon, updateWeapon, setNPCManagerRef } from './player/weapon.js'
+import { initNPCManager, updateNPCs, spawnMultipleNPCs, NPCManager, setNPCsTarget } from './entities/NPCManager.js'
 
 // Estado do jogo
 let gameState = 'menu' // 'menu', 'loading', 'playing', 'paused'
@@ -42,8 +43,6 @@ class MenuSystem {
         this.pauseGame()
       }
     })
-
-    console.log('📱 Sistema de Menu inicializado')
   }
 
   showMenu() {
@@ -96,10 +95,7 @@ class MenuSystem {
       // Esconder loading e menu
       this.hideLoading()
       this.hideMenu()
-      
-      console.log('🎮 Jogo iniciado com sucesso!')
     } catch (error) {
-      console.error('❌ Erro ao inicializar o jogo:', error)
       this.hideLoading()
       alert('Erro ao carregar o jogo. Verifique o console para mais detalhes.')
     }
@@ -108,13 +104,10 @@ class MenuSystem {
   pauseGame() {
     if (gameState === 'playing') {
       this.showMenu()
-      console.log('⏸️ Jogo pausado')
     }
   }
 
   async initGame() {
-    console.log('🚀 Inicializando BeaverFps com física...')
-    
     // 1. Inicializar mundo físico
     await physicsWorld.init()
     
@@ -129,9 +122,9 @@ class MenuSystem {
     // 3.1. Inicializar arma FPS
     await initWeapon()
     
-    // 4. Criar luzes
-    const { ambientLight, directionalLight } = createLights()
-    scene.add(ambientLight, directionalLight)
+    // 4. Criar luzes (HemisphereLight + DirectionalLight com sombras)
+    const { fillLight, directionalLight } = createLights()
+    scene.add(fillLight, directionalLight)
     
     // 5. Inicializar controles (começam pausados)
     initControls()
@@ -142,6 +135,33 @@ class MenuSystem {
     
     // 6.1. Posicionar player após mundo carregado
     positionPlayerAfterWorldLoad()
+    
+    // 6.2. Inicializar sistema de NPCs
+    await initNPCManager()
+    
+    // 6.2.1. Conectar NPCManager à arma para detecção de acertos
+    setNPCManagerRef(NPCManager)
+    
+    // 6.2.2. Definir player como alvo da IA dos NPCs
+    setNPCsTarget(player)
+    
+    // 6.3. Spawnar inimigos com IA
+    await spawnMultipleNPCs(3, {
+      centerX: 5,
+      centerZ: 5,
+      spread: 10,
+      y: 0,
+      scale: 0.15,
+      moveSpeed: 1.2,
+      patrolRadius: 6,
+      // Configurações de IA
+      patrolSpeed: 1.5,
+      chaseSpeed: 3.0,
+      viewDistance: 12,
+      attackDistance: 1.5,
+      attackDamage: 10,
+      showDebug: false  // Mudar para true para ver cone de visão
+    })
     
     // 7. Configurar stats e debug
     stats = createStats()
@@ -166,19 +186,19 @@ class MenuSystem {
         // Atualizar arma (verificar se está andando)
         const isMoving = Input.keys.KeyW || Input.keys.KeyS || Input.keys.KeyA || Input.keys.KeyD
         updateWeapon(delta, isMoving)
+        
+        // Atualizar NPCs
+        updateNPCs(delta)
       },
       () => {
         renderer.render(scene, camera)
       }
     )
-    
-    console.log('✅ Jogo inicializado com sucesso!')
   }
 }
 
 // Inicializar sistema de menu quando a página carregar
 document.addEventListener('DOMContentLoaded', () => {
   new MenuSystem()
-  initDebugMenu() // Inicializar menu de debug
-  console.log('🌟 BeaverFps carregado! Clique em "Iniciar Jogo" para começar.')
+  initDebugMenu()
 })

@@ -1,8 +1,19 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { TextureLoader } from 'three'
 import { camera } from '../core/camera.js'
 import { Input } from './controls.js'
 import { scene } from '../core/scene.js'
+
+// Referência ao NPCManager (definida depois para evitar dependência circular)
+let npcManagerRef = null
+
+export function setNPCManagerRef(manager) {
+  npcManagerRef = manager
+}
+
+// Texture loader para carregar texturas manualmente
+const textureLoader = new THREE.TextureLoader()
 
 /**
  * Sistema de Arma FPS
@@ -23,7 +34,7 @@ export class Weapon {
     // Configurações da arma
     this.config = {
       // Posição e escala do modelo na câmera
-      position: new THREE.Vector3(0, -0.35, -0.3),
+      position: new THREE.Vector3(0, -0.30, -0.3),
       rotation: new THREE.Euler(0, Math.PI, 0),
       scale: new THREE.Vector3(1, 1, 1),
       
@@ -54,9 +65,6 @@ export class Weapon {
     
     // Loader
     this.loader = new GLTFLoader()
-    
-    // Debug
-    this.initDebugFunctions()
   }
   
   /**
@@ -74,6 +82,9 @@ export class Weapon {
       this.model.rotation.copy(this.config.rotation)
       this.model.scale.copy(this.config.scale)
       
+      // Carregar e aplicar texturas manualmente
+      await this.applyTextures()
+      
       // Habilitar sombras
       this.model.traverse((child) => {
         if (child.isMesh) {
@@ -82,6 +93,7 @@ export class Weapon {
           // Garantir que o material renderize corretamente
           if (child.material) {
             child.material.side = THREE.FrontSide
+            child.material.needsUpdate = true
           }
         }
       })
@@ -103,11 +115,9 @@ export class Weapon {
       this.playAnimation('idle')
       
       this.state.isReady = true
-      console.log('🔫 Arma FPS carregada com sucesso!')
-      console.log('📋 Animações disponíveis:', Object.keys(this.animations))
       
     } catch (error) {
-      console.error('❌ Erro ao carregar arma:', error)
+      // Erro ao carregar arma
     }
   }
   
@@ -119,15 +129,102 @@ export class Weapon {
       this.loader.load(
         path,
         (gltf) => resolve(gltf),
-        (progress) => {
-          const percent = (progress.loaded / progress.total * 100).toFixed(0)
-          console.log(`📦 Carregando arma: ${percent}%`)
-        },
+        (progress) => {},
         (error) => reject(error)
       )
     })
   }
   
+  /**
+   * Carrega uma textura
+   */
+  loadTexture(path) {
+    return new Promise((resolve, reject) => {
+      textureLoader.load(
+        path,
+        (texture) => {
+          texture.flipY = false // GLTF usa flipY = false
+          texture.colorSpace = THREE.SRGBColorSpace
+          resolve(texture)
+        },
+        undefined,
+        (error) => reject(error)
+      )
+    })
+  }
+  
+  /**
+   * Aplica as texturas aos materiais da arma
+   */
+  async applyTextures() {
+    const basePath = '/fps_pistol_animations/textures/'
+    
+    // Definir texturas para cada material
+    const textureConfig = {
+      'arms': {
+        diffuse: 'arms_diffuse.png',
+        normal: 'arms_normal.png',
+        specular: 'arms_specularGlossiness.png',
+        occlusion: 'arms_occlusion.png'
+      },
+      'Material': {
+        diffuse: 'Material_diffuse.png',
+        normal: 'Material_normal.png',
+        specular: 'Material_specularGlossiness.png'
+      }
+    }
+    
+    // Carregar todas as texturas
+    const loadedTextures = {}
+    
+    for (const [materialName, textures] of Object.entries(textureConfig)) {
+      loadedTextures[materialName] = {}
+      
+      for (const [type, filename] of Object.entries(textures)) {
+        try {
+          const texture = await this.loadTexture(basePath + filename)
+          loadedTextures[materialName][type] = texture
+        } catch (error) {
+          // Falha silenciosa ao carregar textura
+        }
+      }
+    }
+    
+    // Aplicar texturas aos meshes
+    this.model.traverse((child) => {
+      if (child.isMesh && child.material) {
+        const materialName = child.material.name
+        const textures = loadedTextures[materialName]
+        
+        if (textures) {
+          // Criar novo material PBR com as texturas
+          const newMaterial = new THREE.MeshStandardMaterial({
+            name: materialName,
+            map: textures.diffuse || null,
+            normalMap: textures.normal || null,
+            aoMap: textures.occlusion || null,
+            roughness: 0.5,
+            metalness: 0.3,
+            side: THREE.FrontSide
+          })
+          
+          // Se tiver textura specular, usar para ajustar roughness/metalness
+          if (textures.specular) {
+            // A textura specularGlossiness contém specular (RGB) e glossiness (A)
+            // Vamos usar como roughnessMap invertida
+            newMaterial.roughnessMap = textures.specular
+            newMaterial.metalnessMap = textures.specular
+            newMaterial.roughness = 1.0
+            newMaterial.metalness = 1.0
+          }
+          
+          child.material = newMaterial
+          child.material.needsUpdate = true
+        }
+      }
+    })
+  }
+
   /**
    * Configura as animações do modelo
    */
@@ -152,7 +249,6 @@ export class Weapon {
       if (simpleName) {
         const action = this.mixer.clipAction(clip)
         this.animations[simpleName] = action
-        console.log(`✅ Animação carregada: ${simpleName} (${clip.name})`)
       }
     })
     
@@ -232,7 +328,6 @@ export class Weapon {
       this.state.ammo = this.state.maxAmmo
       this.updateAmmoUI()
       this.playAnimation(this.state.isWalking ? 'walk' : 'idle')
-      console.log('✅ Recarga completa!')
     }
   }
   
@@ -289,7 +384,6 @@ export class Weapon {
     }
     
     if (this.state.ammo <= 0) {
-      console.log('🔫 Sem munição! Pressione R para recarregar.')
       // Auto reload
       this.reload()
       return
@@ -308,8 +402,6 @@ export class Weapon {
     
     // Atualizar UI
     this.updateAmmoUI()
-    
-    console.log(`🔫 Tiro! Munição: ${this.state.ammo}/${this.state.maxAmmo}`)
   }
   
   /**
@@ -328,20 +420,56 @@ export class Weapon {
     if (intersects.length > 0) {
       const hit = intersects[0]
       
-      // Criar efeito de impacto
-      this.createImpactEffect(hit.point, hit.face?.normal)
+      // Verificar se acertou um NPC
+      const hitNPC = this.checkNPCHit(hit.object)
       
-      console.log(`🎯 Acerto em: ${hit.object.name || 'objeto'} a ${hit.distance.toFixed(2)}m`)
+      if (hitNPC) {
+        // Aplicar dano ao NPC
+        hitNPC.takeDamage(this.config.damage)
+        
+        // Criar efeito de impacto vermelho (sangue)
+        this.createImpactEffect(hit.point, hit.face?.normal, 0xff0000)
+      } else {
+        // Criar efeito de impacto normal
+        this.createImpactEffect(hit.point, hit.face?.normal)
+      }
     }
+  }
+  
+  /**
+   * Verifica se o objeto atingido pertence a um NPC
+   */
+  checkNPCHit(hitObject) {
+    if (!npcManagerRef) return null
+    
+    // Subir na hierarquia até encontrar o grupo do NPC
+    let current = hitObject
+    
+    while (current) {
+      // Verificar se é um grupo de NPC
+      if (current.name && current.name.startsWith('NPC_')) {
+        // Encontrar o NPC correspondente
+        const npcId = current.name.replace('NPC_', '')
+        const npc = npcManagerRef.npcs.find(n => n.id === npcId)
+        
+        if (npc && npc.isAlive) {
+          return npc
+        }
+      }
+      
+      current = current.parent
+    }
+    
+    return null
   }
   
   /**
    * Cria efeito visual de impacto
    */
-  createImpactEffect(position, normal) {
+  createImpactEffect(position, normal, color = 0xffff00) {
     const impactGeometry = new THREE.SphereGeometry(0.05, 8, 8)
     const impactMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffff00,
+      color: color,
       transparent: true,
       opacity: 1
     })
@@ -375,7 +503,6 @@ export class Weapon {
     if (this.state.isReloading) return
     
     this.state.isReloading = true
-    console.log('🔄 Recarregando...')
     
     // Tocar animação de recarga (usar reload_full se munição = 0)
     const reloadAnim = this.state.ammo === 0 ? 'reload_full' : 'reload'
@@ -510,7 +637,6 @@ export class Weapon {
     if (this.model) {
       this.model.position.copy(this.config.position)
     }
-    console.log(`🔫 Posição da arma: (${x}, ${y}, ${z})`)
   }
   
   /**
@@ -521,7 +647,6 @@ export class Weapon {
     if (this.model) {
       this.model.scale.copy(this.config.scale)
     }
-    console.log(`🔫 Escala da arma: ${scale}`)
   }
   
   /**
@@ -531,38 +656,6 @@ export class Weapon {
     this.config.rotation.set(x, y, z)
     if (this.model) {
       this.model.rotation.copy(this.config.rotation)
-    }
-    console.log(`🔫 Rotação da arma: (${x}, ${y}, ${z})`)
-  }
-  
-  /**
-   * Funções de debug
-   */
-  initDebugFunctions() {
-    window.weaponDebug = () => {
-      console.log('🔫 Weapon Debug:', {
-        isReady: this.state.isReady,
-        ammo: `${this.state.ammo}/${this.state.maxAmmo}`,
-        isFiring: this.state.isFiring,
-        isReloading: this.state.isReloading,
-        currentAnimation: this.currentAction?.getClip().name,
-        animations: Object.keys(this.animations)
-      })
-    }
-    
-    window.weaponPos = (x, y, z) => this.setPosition(x, y, z)
-    window.weaponScale = (s) => this.setScale(s)
-    window.weaponRot = (x, y, z) => this.setRotation(x, y, z)
-    
-    window.giveAmmo = (amount = 12) => {
-      this.state.ammo = Math.min(this.state.maxAmmo, this.state.ammo + amount)
-      this.updateAmmoUI()
-      console.log(`🔫 Munição: ${this.state.ammo}/${this.state.maxAmmo}`)
-    }
-    
-    window.playWeaponAnim = (name) => {
-      this.playAnimation(name)
-      console.log(`🎬 Tocando animação: ${name}`)
     }
   }
   
@@ -583,16 +676,6 @@ export class Weapon {
     if (this.mixer) {
       this.mixer.stopAllAction()
     }
-    
-    // Limpar funções globais
-    delete window.weaponDebug
-    delete window.weaponPos
-    delete window.weaponScale
-    delete window.weaponRot
-    delete window.giveAmmo
-    delete window.playWeaponAnim
-    
-    console.log('🧹 Arma disposed')
   }
 }
 

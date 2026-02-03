@@ -20,7 +20,7 @@ export class Player {
       height: 1.4,
       maxSpeed: 10.0,
       mouseSensitivity: 0.002,
-      fov: 75
+      fov: 57
     }
     
     // Estado do player
@@ -55,10 +55,6 @@ export class Player {
     this._moveVector = new THREE.Vector3()
     this._rayOrigin = new THREE.Vector3()
     this._rayDirection = new THREE.Vector3(0, -1, 0)
-    
-    // Expor configuração globalmente para debug
-    window.playerConfig = this.config
-    this.initDebugFunctions()
   }
   
   /**
@@ -66,7 +62,7 @@ export class Player {
    */
   async init() {
     // Posição inicial
-    this.object3D.position.set(0, 2, 0)
+    this.object3D.position.set(0, 4, 4)
     this.state.position.copy(this.object3D.position)
     
     // Configurar câmera
@@ -84,13 +80,6 @@ export class Player {
     
     this.physics.rigidBody = playerPhysics.rigidBody
     this.physics.collider = playerPhysics.collider
-    
-    console.log('🧑 Player inicializado:', {
-      position: this.physics.rigidBody.translation(),
-      mass: this.physics.collider.mass(),
-      bodyType: this.physics.rigidBody.bodyType(),
-      config: this.config
-    })
   }
   
   /**
@@ -147,11 +136,6 @@ export class Player {
     
     const wasGrounded = this.state.isGrounded
     this.state.isGrounded = hit !== null && hit.distance <= (this.config.height / 2 + 0.3)
-    
-    // DEBUG: Log mudanças de estado do chão
-    if (wasGrounded !== this.state.isGrounded) {
-      console.log('🏃 Estado do chão mudou:', this.state.isGrounded ? 'NO CHÃO' : 'NO AR')
-    }
   }
   
   /**
@@ -188,23 +172,8 @@ export class Player {
   processJump() {
     const spacePressed = Input.keys.Space || Input.keys[' ']
     
-    // DEBUG: Mostrar sempre que Space é pressionado
-    if (spacePressed) {
-      console.log('🎮 SPACE PRESSIONADO!')
-      console.log('- isGrounded:', this.state.isGrounded)
-      console.log('- Posição Y:', this.object3D.position.y.toFixed(2))
-      
-      if (this.state.isGrounded) {
-        console.log('✅ Condições ok - executando pulo!')
-        this.jump()
-      } else {
-        console.log('❌ Não pode pular - não está no chão')
-        
-        // Se não está no chão, vamos forçar para estar (debug)
-        console.log('🔧 DEBUG: Forçando isGrounded = true para teste')
-        this.state.isGrounded = true
-        this.jump()
-      }
+    if (spacePressed && this.state.isGrounded) {
+      this.jump()
     }
   }
   
@@ -220,8 +189,6 @@ export class Player {
       y: jumpForce,
       z: currentVel.z
     }, true)
-    
-    console.log('🦘 PULO! Força aplicada:', jumpForce)
   }
   
   /**
@@ -295,8 +262,7 @@ export class Player {
    * Posiciona o player após o mundo ser carregado
    */
   positionAfterWorldLoad() {
-    this.setPosition(0, 5, 0) // 5 metros acima da origem
-    console.log('🎯 Player posicionado após carregamento do mundo')
+    this.setPosition(0, 5, 4)
   }
   
   /**
@@ -320,7 +286,6 @@ export class Player {
     this.config.fov = fov
     camera.fov = fov
     camera.updateProjectionMatrix()
-    console.log(`📷 FOV alterado para ${fov}°`)
   }
   
   /**
@@ -328,7 +293,6 @@ export class Player {
    */
   setMovementSpeed(speed) {
     this.config.speed = speed
-    console.log(`🏃 Velocidade de movimento alterada para ${speed}`)
   }
   
   /**
@@ -336,7 +300,6 @@ export class Player {
    */
   setJumpForce(force) {
     this.config.jumpForce = force
-    console.log(`🦘 Força do pulo alterada para ${force}`)
   }
   
   /**
@@ -344,128 +307,6 @@ export class Player {
    */
   setMouseSensitivity(sensitivity) {
     this.config.mouseSensitivity = sensitivity
-    console.log(`🖱️ Sensibilidade do mouse alterada para ${sensitivity}`)
-  }
-  
-  /**
-   * Debug: obtém informações do player
-   */
-  getDebugInfo() {
-    if (!this.physics.rigidBody) {
-      return { error: 'Player não inicializado' }
-    }
-    
-    const pos = this.physics.rigidBody.translation()
-    const vel = this.physics.rigidBody.linvel()
-    
-    return {
-      position: { x: pos.x.toFixed(2), y: pos.y.toFixed(2), z: pos.z.toFixed(2) },
-      velocity: { x: vel.x.toFixed(2), y: vel.y.toFixed(2), z: vel.z.toFixed(2) },
-      state: {
-        isGrounded: this.state.isGrounded,
-        canJump: this.state.canJump,
-        health: this.state.health,
-        stamina: this.state.stamina.toFixed(1)
-      },
-      config: this.config,
-      camera: {
-        yaw: (this.camera.yaw * 180 / Math.PI).toFixed(1) + '°',
-        pitch: (this.camera.pitch * 180 / Math.PI).toFixed(1) + '°'
-      },
-      input: {
-        spacePressed: Input.keys.Space || Input.keys[' '],
-        movement: {
-          w: Input.keys.KeyW,
-          a: Input.keys.KeyA,
-          s: Input.keys.KeyS,
-          d: Input.keys.KeyD
-        }
-      }
-    }
-  }
-  
-  /**
-   * Força um pulo (para debug)
-   */
-  forceJump() {
-    if (!this.physics.rigidBody) {
-      console.log('❌ Player não inicializado')
-      return
-    }
-    
-    this.jump()
-    console.log('🦘 PULO FORÇADO!')
-  }
-  
-  /**
-   * Testa todas as condições de pulo
-   */
-  testJumpConditions() {
-    const now = Date.now()
-    const spacePressed = Input.keys.Space || Input.keys[' ']
-    
-    console.log('🧪 TESTE DE CONDIÇÕES DE PULO:')
-    console.log('1. Space pressionado:', spacePressed)
-    console.log('2. canJump:', this.state.canJump)
-    console.log('3. isGrounded:', this.state.isGrounded)
-    console.log('4. Tempo desde último pulo:', now - this.state.lastJumpTime, 'ms')
-    console.log('5. Cooldown necessário:', this.state.jumpCooldown, 'ms')
-    
-    const cooldownOk = (now - this.state.lastJumpTime > this.state.jumpCooldown)
-    const allConditions = spacePressed && this.state.canJump && this.state.isGrounded && cooldownOk
-    
-    console.log('🎯 RESULTADO: Pulo deveria funcionar?', allConditions)
-    
-    return allConditions
-  }
-  
-  /**
-   * Reseta o sistema de pulo
-   */
-  resetJumpSystem() {
-    this.state.canJump = true
-    this.state.lastJumpTime = 0
-    console.log('🔄 Sistema de pulo resetado!')
-  }
-  
-  /**
-   * Inicializa funções de debug globais
-   */
-  initDebugFunctions() {
-    window.debugPlayer = () => console.log('🔧 Player Debug Info:', this.getDebugInfo())
-    window.testJump = () => this.forceJump()
-    window.testJumpConditions = () => this.testJumpConditions()
-    window.resetJumpSystem = () => this.resetJumpSystem()
-    window.setPlayerPosition = (x, y, z) => this.setPosition(x, y, z)
-    window.setJumpForce = (force) => this.setJumpForce(force)
-    window.setMovementSpeed = (speed) => this.setMovementSpeed(speed)
-    window.setMouseSensitivity = (sens) => this.setMouseSensitivity(sens)
-    window.setPlayerFOV = (fov) => this.setFOV(fov)
-    
-    // Nova função para testar pulo em tempo real
-    window.testJumpNow = () => {
-      console.log('🧪 TESTE DE PULO EM TEMPO REAL:')
-      console.log('1. Space pressionado:', Input.keys.Space || Input.keys[' '])
-      console.log('2. Player no chão:', this.state.isGrounded)
-      console.log('3. Posição Y atual:', this.object3D.position.y.toFixed(2))
-      
-      if (this.state.isGrounded) {
-        console.log('✅ Tentando pular...')
-        this.jump()
-      } else {
-        console.log('❌ Não pode pular - não está no chão')
-      }
-    }
-    
-    // Presets úteis
-    window.jumpPresets = () => {
-      console.log('🎮 PRESETS DE PULO:')
-      console.log('setJumpForce(5)   // Pulo baixo')
-      console.log('setJumpForce(10)  // Pulo normal') 
-      console.log('setJumpForce(15)  // Pulo alto')
-      console.log('setJumpForce(20)  // Super pulo')
-      console.log('testJumpNow()     // Testar pulo agora')
-    }
   }
   
   /**
@@ -479,20 +320,5 @@ export class Player {
     if (this.physics.collider) {
       physicsWorld.world.removeCollider(this.physics.collider, true)
     }
-    
-    // Limpar funções globais
-    delete window.debugPlayer
-    delete window.testJump
-    delete window.testJumpConditions
-    delete window.resetJumpSystem
-    delete window.setPlayerPosition
-    delete window.setJumpForce
-    delete window.setMovementSpeed
-    delete window.setMouseSensitivity
-    delete window.setPlayerFOV
-    delete window.jumpPresets
-    delete window.playerConfig
-    
-    console.log('🧹 Player disposed')
   }
 }

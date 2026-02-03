@@ -21,12 +21,8 @@ class PhysicsWorld {
     const gravity = { x: 0.0, y: -9.81, z: 0.0 }
     this.world = new RAPIER.World(gravity)
     
-    console.log(`🌍 Mundo físico criado com gravidade Y: ${gravity.y}`)
-    
     // Event queue para detecção de colisões
     this.eventQueue = new RAPIER.EventQueue(true)
-    
-    console.log('Physics world initialized - waiting for GLB to load')
   }
 
   createRigidBody(bodyDesc, mesh) {
@@ -57,8 +53,6 @@ class PhysicsWorld {
       .setRestitution(0.0)
     
     this.world.createCollider(colliderDesc, rigidBody)
-    
-    console.log('🌍 Chão de teste criado em Y=-1')
   }
 
   // Criar corpo físico para objetos estáticos (mundo/cenário)
@@ -124,7 +118,6 @@ class PhysicsWorld {
           colliderDesc.setRestitution(0.0)
           
           this.createCollider(colliderDesc, rigidBody, mesh)
-          console.log(`📦 Collider criado para: ${mesh.name}`)
           return rigidBody
         }
       }
@@ -133,6 +126,47 @@ class PhysicsWorld {
     }
     
     return null
+  }
+
+  // Criar corpo físico para NPC (cápsula como o player, mas com IA)
+  createNPCBody(position, radius = 0.3, height = 1.4) {
+    const rigidBodyDesc = RAPIER.RigidBodyDesc.kinematicPositionBased()
+      .setTranslation(position.x, position.y, position.z)
+    
+    const rigidBody = this.world.createRigidBody(rigidBodyDesc)
+    
+    // Collider em formato de cápsula
+    const colliderDesc = RAPIER.ColliderDesc.capsule(height / 2, radius)
+      .setFriction(0.5)
+      .setRestitution(0.0)
+    
+    const collider = this.world.createCollider(colliderDesc, rigidBody)
+    
+    return { rigidBody, collider }
+  }
+
+  // Mover NPC com física (kinematic)
+  moveNPCBody(rigidBody, newPosition) {
+    if (rigidBody) {
+      rigidBody.setNextKinematicTranslation(newPosition)
+    }
+  }
+
+  // Raycast para NPC verificar chão
+  npcGroundCheck(position, maxDistance = 2.0) {
+    const origin = { x: position.x, y: position.y + 0.5, z: position.z }
+    const direction = { x: 0, y: -1, z: 0 }
+    
+    const hit = this.castRay(origin, direction, maxDistance)
+    
+    if (hit) {
+      return {
+        grounded: hit.distance <= 1.0,
+        groundY: hit.point.y
+      }
+    }
+    
+    return { grounded: false, groundY: position.y }
   }
 
   // Criar corpo físico dinâmico (player, objetos móveis)
@@ -256,9 +290,7 @@ class PhysicsWorld {
   // Função para alterar a gravidade dinamicamente
   setGravity(x = 0.0, y = -9.81, z = 0.0) {
     if (this.world) {
-      const newGravity = { x, y, z }
-      this.world.gravity = newGravity
-      console.log(`🌍 Gravidade alterada para:`, newGravity)
+      this.world.gravity = { x, y, z }
     }
   }
 
@@ -272,8 +304,6 @@ class PhysicsWorld {
 
   // Função específica para criar física a partir de um modelo GLB carregado
   createPhysicsFromGLB(gltfScene) {
-    console.log('🔧 Processando GLB para criar física...')
-    
     const physicsObjects = []
     let colliderCount = 0
     
@@ -292,18 +322,14 @@ class PhysicsWorld {
             if (rigidBody) {
               physicsObjects.push({ mesh: child, rigidBody })
               colliderCount++
-              console.log(`✅ Física criada para: ${child.name} (${name})`)
             }
           } catch (error) {
-            console.warn(`⚠️ Erro ao criar física para ${child.name}:`, error)
+            // Erro silencioso para objetos que não suportam física
           }
-        } else {
-          console.log(`⏭️ Pulando física para: ${child.name} (decorativo)`)
         }
       }
     })
     
-    console.log(`🎯 GLB processado: ${colliderCount} colliders criados de ${physicsObjects.length} objetos`)
     return physicsObjects
   }
 
@@ -343,11 +369,6 @@ class PhysicsWorld {
 // Instância global do mundo físico
 export const physicsWorld = new PhysicsWorld()
 
-// Expor funções de gravidade globalmente para testes no console
-window.setGravity = (x = 0, y = -9.81, z = 0) => physicsWorld.setGravity(x, y, z)
-window.getGravity = () => physicsWorld.getGravity()
-window.resetGravity = () => physicsWorld.setGravity(0, -9.81, 0)
-
 // Função para encontrar uma posição segura para spawnar o player
 physicsWorld.findSafeSpawnPosition = function(worldBounds = { minY: -10, maxY: 50 }) {
   // Tentar algumas posições padrão
@@ -370,11 +391,10 @@ physicsWorld.findSafeSpawnPosition = function(worldBounds = { minY: -10, maxY: 5
     if (hit) {
       // Posição segura: um pouco acima do chão encontrado
       const safeY = hit.point.y + 2 // 2 metros acima do chão
-      console.log(`🎯 Posição segura encontrada: (${testPos.x}, ${safeY.toFixed(2)}, ${testPos.z})`)
       return { x: testPos.x, y: safeY, z: testPos.z }
     }
   }
   
-  // Fallback: posição padrão alta    console.log('⚠️ Nenhuma posição segura encontrada, usando fallback')
+  // Fallback: posição padrão alta
     return { x: 0, y: 5, z: 0 }
   }

@@ -7,7 +7,7 @@ const loader = new GLTFLoader().setPath('/models/')
 export function loadWorld() {
   return new Promise((resolve, reject) => {
     loader.load(
-      'collision-world.glb', 
+      'fps_map.glb', 
       (gltf) => {
         const world = gltf.scene
         scene.add(world)
@@ -27,22 +27,19 @@ export function loadWorld() {
 
         // Tentar criar física (se falhar, continua sem)
         try {
-          const physicsObjects = physicsWorld.createPhysicsFromGLB(world)
-          console.log(`🌍 Mundo carregado com ${physicsObjects.length} objetos físicos`)
+          physicsWorld.createPhysicsFromGLB(world)
         } catch (error) {
-          console.warn('⚠️ Erro na física, continuando sem:', error)
+          // Continua sem física se falhar
         }
         
         resolve({ world })
       },
       
       (progress) => {
-        const percent = (progress.loaded / progress.total * 100).toFixed(1)
-        console.log(`📦 Carregando mundo: ${percent}%`)
+        // Progresso silencioso
       },
       
       (error) => {
-        console.error('❌ Erro ao carregar mundo:', error)
         reject(error)
       }
     )

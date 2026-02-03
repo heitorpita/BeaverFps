@@ -5,6 +5,8 @@ import {
   setPlayerFOV, 
   setPlayerJumpForce 
 } from '../player/player.js'
+import { NPCManager, spawnNPC } from '../entities/NPCManager.js'
+import * as THREE from 'three'
 
 // Configurações do menu debug
 const debugConfig = {
@@ -64,12 +66,14 @@ const menuSections = [
     ]
   },
   {
-    title: 'SCENE',
+    title: 'ENEMIES',
     options: [
-      { label: 'Add Cube', action: 'addCube' },
-      { label: 'Remove Last Object', action: 'removeObject' },
-      { label: 'Save Scene', action: 'saveScene' },
-      { label: 'Revert Scene', action: 'revertScene' }
+      { label: 'Spawn Enemy (Front)', action: 'spawnEnemyFront' },
+      { label: 'Spawn Enemy (Random)', action: 'spawnEnemyRandom' },
+      { label: 'Spawn 3 Enemies', action: 'spawn3Enemies' },
+      { label: 'Kill All Enemies', action: 'killAllEnemies' },
+      { label: 'Revive All Enemies', action: 'reviveAllEnemies' },
+      { label: 'Remove All Enemies', action: 'removeAllEnemies' }
     ]
   }
 ]
@@ -268,18 +272,87 @@ function applyConfigChange(key, value) {
 // Executar ação do menu
 function executeAction(action) {
   switch (action) {
-    case 'addCube':
-      console.log('🎲 Adding cube... (not implemented)')
+    case 'spawnEnemyFront':
+      spawnEnemyInFront()
       break
-    case 'removeObject':
-      console.log('🗑️ Removing object... (not implemented)')
+    case 'spawnEnemyRandom':
+      spawnEnemyRandom()
       break
-    case 'saveScene':
-      console.log('💾 Saving scene... (not implemented)')
+    case 'spawn3Enemies':
+      spawn3Enemies()
       break
-    case 'revertScene':
-      console.log('↶ Reverting scene... (not implemented)')
+    case 'killAllEnemies':
+      NPCManager.killAll()
       break
+    case 'reviveAllEnemies':
+      NPCManager.reviveAll()
+      break
+    case 'removeAllEnemies':
+      NPCManager.removeAll()
+      break
+  }
+}
+
+// Spawna inimigo na frente do player
+async function spawnEnemyInFront() {
+  const forward = new THREE.Vector3()
+  camera.getWorldDirection(forward)
+  forward.y = 0
+  forward.normalize()
+  
+  const spawnPos = new THREE.Vector3()
+  spawnPos.copy(camera.position)
+  spawnPos.addScaledVector(forward, 5) // 5 metros na frente
+  spawnPos.y = 0
+  
+  const npc = await spawnNPC({
+    position: spawnPos,
+    scale: 0.15,
+    chaseSpeed: 3.0,
+    viewDistance: 12,
+    showDebug: false
+  })
+}
+
+// Spawna inimigo em posição aleatória
+async function spawnEnemyRandom() {
+  const spawnPos = new THREE.Vector3(
+    (Math.random() - 0.5) * 20,
+    0,
+    (Math.random() - 0.5) * 20
+  )
+  
+  const npc = await spawnNPC({
+    position: spawnPos,
+    scale: 0.15,
+    chaseSpeed: 3.0,
+    viewDistance: 12,
+    showDebug: false
+  })
+}
+
+// Spawna 3 inimigos ao redor do player
+async function spawn3Enemies() {
+  const playerPos = camera.position.clone()
+  playerPos.y = 0
+  
+  for (let i = 0; i < 3; i++) {
+    const angle = (i / 3) * Math.PI * 2
+    const distance = 8 + Math.random() * 5
+    
+    const spawnPos = new THREE.Vector3(
+      playerPos.x + Math.cos(angle) * distance,
+      0,
+      playerPos.z + Math.sin(angle) * distance
+    )
+    
+    await spawnNPC({
+      position: spawnPos,
+      scale: 0.15,
+      chaseSpeed: 3.0,
+      viewDistance: 12,
+      showDebug: false
+    })
   }
 }
 
@@ -353,10 +426,8 @@ export function toggleDebugMenu() {
   if (menuVisible) {
     menuElement.classList.add('visible')
     renderMenu()
-    console.log('🔧 Debug menu opened')
   } else {
     menuElement.classList.remove('visible')
-    console.log('🔧 Debug menu closed')
   }
 }
 
@@ -401,8 +472,6 @@ export function initDebugMenu() {
   
   // Expor configurações globalmente para outros módulos
   window.debugConfig = debugConfig
-  
-  console.log('🔧 Debug menu initialized')
 }
 
 // Exportar configurações para outros módulos

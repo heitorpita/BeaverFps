@@ -116,7 +116,6 @@ export function createPhysicsDebug(scene) {
     if (event.code === 'F1') {
       event.preventDefault()
       physicsDebug.toggle()
-      console.log('Physics debug:', physicsDebug.enabled ? 'ON' : 'OFF')
     }
   })
   

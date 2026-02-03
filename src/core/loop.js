@@ -8,7 +8,6 @@ let isLoopRunning = false
 
 export function startLoop(update, render) {
   if (isLoopRunning) {
-    console.warn('⚠️ Loop já está rodando')
     return
   }
 
@@ -27,7 +26,6 @@ export function startLoop(update, render) {
   }
 
   animationFrameId = requestAnimationFrame(loop)
-  console.log('▶️ Loop iniciado')
 }
 
 export function stopLoop() {
@@ -36,5 +34,4 @@ export function stopLoop() {
     cancelAnimationFrame(animationFrameId)
     animationFrameId = null
   }
-  console.log('⏹️ Loop parado')
 }
